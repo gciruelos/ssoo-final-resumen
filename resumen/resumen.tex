@@ -1,0 +1,226 @@
+\documentclass[11pt, spanish]{report}
+\usepackage[spanish]{babel}
+\selectlanguage{spanish}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amsthm}
+\usepackage{listings}
+
+% listings de C (pseudocódigo en realidad).
+\lstset{language=C,frame=single,numbers=left,morekeywords={foreach}}
+
+% Tikz
+\usepackage{pgf}
+\usepackage{tikz}
+\usetikzlibrary{arrows,automata}
+
+% Margenes
+\usepackage[inner=3cm,outer=2cm]{geometry}
+\setlength{\oddsidemargin}{5.5pt}
+\setlength{\evensidemargin}{5.5pt}
+%Espaciado
+%\linespread{1.3}
+
+\newcommand{\transition}{l}
+\newcommand{\globally}{\square}
+\newcommand{\finally}{\lozenge}
+
+\newcommand{\readf}{\texttt{read()\,}}
+\newcommand{\writef}{\texttt{write()\,}}
+
+\title{Sistemas Operativos}
+\date{}
+
+\begin{document}
+\maketitle
+
+\chapter{Sistemas Distribuidos}
+
+Conjunto de recursos conectados que interactúan.
+\begin{itemize}
+  \item Varias máquinas conectadas en red.
+  \item Un procesador con varias memorias.
+  \item Varios procesadores que comparen una (o más) memoria(s).
+\end{itemize}
+
+\begin{itemize}
+  \item Fortalezas \begin{itemize}
+      \item Paralelismo.
+      \item Replicación.
+      \item Descentralización.
+    \end{itemize}
+  \item Debilidades \begin{itemize}
+      \item Sincronización.
+      \item Coherencia.
+      \item \textbf{Información parcial.}
+    \end{itemize}
+\end{itemize}
+
+\section{Memoria compartida}
+
+Hardware
+\begin{itemize}
+\item Uniform Memory Access (UMA) Procesadores 
+\end{itemize}
+
+
+\section{Sincronización}
+
+Modelos de comunicación.
+\begin{itemize}
+  \item Envío asincrónico de mensajes.
+  \item Memoria compartida global direccionable.
+\end{itemize}
+
+Problemas.
+\begin{itemize}
+  \item Orden de ocurrencia de los eventos.
+  \item Exclusión mutua.
+  \item Consenso.
+\end{itemize}
+
+\subsection{Modelo de proceso}
+
+\begin{tikzpicture}[align=center,node distance=2.8cm]
+  \tikzstyle{every state}=[fill=red,draw=none,text=white]
+
+  \node[initial,state] (R)              {$R$};
+  \node[state]         (T) [right of=R] {$T$};
+  \node[state]         (C) [right of=T] {$C$};
+  \node[state]         (E) [right of=C] {$E$};
+
+  \path (R) edge              node {try} (T)
+        (T) edge              node {crit} (C)
+        (C) edge              node {exit} (E)
+        (E) edge [bend right]  node {rem} (R);
+\end{tikzpicture}
+
+
+
+
+\begin{itemize}
+  \item $N$ procesos.
+  \item Estado: $\sigma : \{0,\dots,N-1\} \to \{R, T, C, E\}$.
+  \item Transición: $\sigma \xrightarrow{\transition} \sigma'$, $\transition \in \{rem, try, crit, exit\}$.
+  \item Ejecución: $\tau = \tau_0 \xrightarrow{\transition} \tau_1 \xrightarrow{\transition'} \dots$.
+  \item $\globally$ significa globalmente, siempre.
+  \item $\finally$ significa finalmente, eventualmente.
+\end{itemize}
+
+\textbf{Exclusión mutua (EXCL)}
+Para toda ejecución $\tau$ y estado $\tau_k$, no puede haber más de un proceso $i$ tal que $\tau_k(i) = C$.
+\[\globally \#CRIT \leq 1\]
+
+\textbf{Progreso (PROG)} (lock-free)
+Para toda ejecución $\tau$, estado $\tau_k$ y todo proceso $i$, si $\tau_k(i) = T$, entonces $\exists j > k$, tal que $\tau_j(i) = C$.
+
+\[IN(i) \equiv i\in TRY \implies \finally i \in CRIT\]
+\[\forall i . \globally IN(i)\]
+
+\textbf{Prograso global dependiente (G-PROG)} (deadlock-free, lockout-free, starvation-free)
+Para toda ejecución $\tau$,
+si para todo estado $\tau_k$ y proceso $i$ tal que $\tau_k(i) = C$,
+  $\exists j > k$, tal que $\tau_j(i) = R$.
+entonces para todo estado $\tau_{k'}$ y todo proceso $i'$,
+  si $\tau_{k'}(i') = T$
+  entonces $\exists j' > k'$, tal que $\tau_{j'}(i') = C$.
+
+\[OUT(i) \equiv i \in CRIT \implies \finally i \in REM\]
+\[(\forall \globally i. OUT(i)) \implies (\forall i . \globally IN(i))\]
+
+\textbf{Justicia (FAIR)} (fairness)
+Para toda ejecución $\tau$ y todo proceso $i$,
+si $i$ puede hacer una transición $\transition_i$ en una cantidad infinita de estados de $\tau$
+entonces existe un $k$ tal que $\tau_k \xrightarrow{\transition_i} \tau_{k+1}$.
+
+\subsection{Registros RW}
+Objeto atómico básico: \textbf{read-write register}.
+
+Procesos por operación: \textbf{single/multiple}.
+
+\begin{itemize}
+  \item Si \readf y \writef no se solapan, \readf devuelve el \textbf{último} valor escrito.
+  \item Si \readf y \writef se solapan \begin{itemize}
+      \item ``Safe'': \readf devuelve \textbf{cualquier} valor.
+      \item Regular: \readf devuelve \textbf{algún} valor escrito.
+      \item \textbf{Atomic}: \readf devuelve un valor \textbf{consistente} con una serialización.
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{EXCL con registros RW: Dijkstra}
+Registros:
+\begin{itemize}
+  \item \texttt{flag[i]}: atomic single-writer / multi-reader.
+  \item \texttt{turn}: atomic multi-writer / multi-reader.
+\end{itemize}
+
+Proceso $i$:
+\begin{lstlisting}
+  /* Try */
+  L:
+    flag[i] = 1;
+    while (turn != i) {
+      if (flag[turn] == 0) turn = i;
+    }
+    flag[i] = 2;
+    foreach (j != i) {
+      if (flag[j] == 2) goto L;
+    }
+  /* Crit */
+  ...
+  /* Exit */
+  flag[i] = 0;
+\end{lstlisting}
+
+\begin{itemize}
+  \item Garantiza EXCL.
+  \item Asumiendo FAIR, garantiza PROG, pero no G-PROG.
+\end{itemize}
+
+La idea de la demostración de que, asumiendo FAIR garantiza PROG es por el absurdo.
+Supongamos que hay una cadena de pasos $\alpha$ que es FAIR pero que no satisface PROG, es decir, eventualmente hay alguien en $T$ y nadie en $C$, pero nunca más nadie entra en $C$.
+Veamos que le pasa a $\alpha$.
+\begin{enumerate}
+  \item Eventualmente, todos los procesos, o bien van a estar en $T$ o bien van a estar en $R$ (pues como es fair, si estan en $E$ eventualmente van a llegar a $R$ o $T$.
+  \item Eventualmente esos procesos no van a cambiar nunca más de estado (es decir, no va a haber mas transiciones de $R$ a $T$. Además, para todo $i$ en $T$, $\texttt{flags[i]} \leq 1$.
+  \item Eventualmente, $\texttt{turn}$ va a valer $i$ para algún $i$ en $T$ y no va a cambiar (es decir, $\texttt{turn}$ se estabiliza).
+  \item Eventualmente, todos los $j \neq i$ van a tener $\texttt{flags[j]} \neq 2$, pues no pueden pasar el primer loop. Luego, el proceso $i$ entra a $C$, absurdo.
+\end{enumerate}
+
+
+\subsubsection{EXCL con registros RW: Panadería de Lamport}
+Registros:
+\begin{itemize}
+  \item \texttt{choosing[i]}, \texttt{number[i]}: atomic single-writer / multi-reader.
+\end{itemize}
+
+Proceso $i$:
+\begin{lstlisting}
+  /* Try */
+  choosing[i] = 1;
+  number[i] = 1 + max {number[j] | j != i};
+  choosing[i] = 0;
+  foreach j != i {
+    waitfor choosing[j] == 0;
+    waitfor number[j] == 0 || (number[i], i) < (number[j], j);
+  }
+  /* Crit */
+  ...
+  /* Exit */
+  number[i] = 0;
+\end{lstlisting}
+
+\begin{itemize}
+  \item Garantiza EXCL, PROG y G-PROG.
+\end{itemize}
+
+La idea de la demostración de que garantiza PROG es por el absurdo y es muy fácil. Igual que antes, eventualmente todos van a estar en $T$ o $R$, sin pasarse. De los que están en $T$, alguno va a tener el menor par $(\texttt{number[i]}, i)$, y ese va a pasar a $C$.
+
+
+
+
+
+
+
+\end{document}
